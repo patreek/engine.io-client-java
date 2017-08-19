@@ -34,7 +34,6 @@ public class Socket extends Emitter {
 
     private static final String PROBE_ERROR = "probe error";
 
-
     private enum ReadyState {
         OPENING, OPEN, CLOSING, CLOSED;
 
@@ -130,6 +129,7 @@ public class Socket extends Emitter {
 
     private ReadyState readyState;
     private ScheduledExecutorService heartbeatScheduler;
+    private boolean externalScheduler = false;
     private final Listener onHeartbeatAsListener = new Listener() {
         @Override
         public void call(Object... args) {
@@ -207,6 +207,9 @@ public class Socket extends Emitter {
         this.proxy = opts.proxy;
         this.proxyLogin = opts.proxyLogin;
         this.proxyPassword = opts.proxyPassword;
+        this.heartbeatScheduler = opts.heartbeatScheduler;
+        if (this.heartbeatScheduler != null)
+            this.externalScheduler = true;
     }
 
     public static void setDefaultSSLContext(SSLContext sslContext) {
@@ -777,6 +780,22 @@ public class Socket extends Emitter {
         this.onClose(reason, null);
     }
 
+    @Override
+    protected void finalize() throws Throwable
+    {
+        if (this.pingIntervalTimer != null) {
+            this.pingIntervalTimer.cancel(false);
+        }
+        if (this.pingTimeoutTimer != null) {
+            this.pingTimeoutTimer.cancel(false);
+        }
+        if (!this.externalScheduler && this.heartbeatScheduler != null) {
+            this.heartbeatScheduler.shutdown();
+        }
+
+        super.finalize();
+    }
+
     private void onClose(String reason, Exception desc) {
         if (ReadyState.OPENING == this.readyState || ReadyState.OPEN == this.readyState || ReadyState.CLOSING == this.readyState) {
             logger.fine(String.format("socket close with reason: %s", reason));
@@ -785,12 +804,15 @@ public class Socket extends Emitter {
             // clear timers
             if (this.pingIntervalTimer != null) {
                 this.pingIntervalTimer.cancel(false);
+                this.pingIntervalTimer = null;
             }
             if (this.pingTimeoutTimer != null) {
                 this.pingTimeoutTimer.cancel(false);
+                this.pingTimeoutTimer = null;
             }
-            if (this.heartbeatScheduler != null) {
-                this.heartbeatScheduler.shutdown();
+            if (!this.externalScheduler && this.heartbeatScheduler != null) {
+                this.heartbeatScheduler.shutdownNow();
+                this.heartbeatScheduler = null;
             }
 
             // stop event from firing again for transport
@@ -856,6 +878,8 @@ public class Socket extends Emitter {
         public boolean rememberUpgrade;
         public String host;
         public String query;
+
+        public ScheduledExecutorService heartbeatScheduler = null;
 
 
         private static Options fromURI(URI uri, Options opts) {
