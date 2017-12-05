@@ -31,6 +31,7 @@ import java.util.logging.Logger;
 public class Socket extends Emitter {
 
     private static final Logger logger = Logger.getLogger(Socket.class.getName());
+    private Logger extLogger;
 
     private static final String PROBE_ERROR = "probe error";
 
@@ -126,6 +127,7 @@ public class Socket extends Emitter {
     public Proxy proxy;
     public String proxyLogin;
     public String proxyPassword;
+    private String debugPayload;
 
     private ReadyState readyState;
     private ScheduledExecutorService heartbeatScheduler;
@@ -210,6 +212,8 @@ public class Socket extends Emitter {
         this.heartbeatScheduler = opts.heartbeatScheduler;
         if (this.heartbeatScheduler != null)
             this.externalScheduler = true;
+        this.debugPayload = opts.debugPayload;
+        this.extLogger = opts.extLogger;
     }
 
     public static void setDefaultSSLContext(SSLContext sslContext) {
@@ -661,7 +665,7 @@ public class Socket extends Emitter {
             public void run() {
                 Socket.this.sendPacket(Packet.MESSAGE, msg, fn);
             }
-        });
+        }, this);
     }
 
     public void send(final byte[] msg, final Runnable fn) {
@@ -793,6 +797,11 @@ public class Socket extends Emitter {
             this.heartbeatScheduler.shutdown();
         }
 
+        if (id != null) {
+            extLogger.severe("Socket was not closed properly. Debug payload: " + debugPayload);
+            System.exit(999);
+        }
+
         super.finalize();
     }
 
@@ -881,6 +890,8 @@ public class Socket extends Emitter {
 
         public ScheduledExecutorService heartbeatScheduler = null;
 
+        public String debugPayload;
+        public Logger extLogger;
 
         private static Options fromURI(URI uri, Options opts) {
             if (opts == null) {
