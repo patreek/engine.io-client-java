@@ -665,7 +665,7 @@ public class Socket extends Emitter {
             public void run() {
                 Socket.this.sendPacket(Packet.MESSAGE, msg, fn);
             }
-        }, this);
+        });
     }
 
     public void send(final byte[] msg, final Runnable fn) {
